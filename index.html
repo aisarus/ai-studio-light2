@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Scene Studio</title>
+<style>
+  :root {
+    --bg-main: #000000;
+    --bg-panel: #1c1c1e;
+    --bg-panel-hover: #2c2c2e;
+    --accent: #0a84ff; /* Apple Blue */
+    --text-primary: #f2f2f7;
+    --text-secondary: #8e8e93;
+    --border: #38383a;
+    --radius: 8px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Header */
+  header {
+    height: 50px;
+    background-color: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  /* Main Workspace */
+  .workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Inspector (Left Sidebar) */
+  .inspector {
+    width: 320px;
+    background-color: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .inspector-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .inspector-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    letter-spacing: 0.05em;
+  }
+
+  /* Viewer (Center) */
+  .viewer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-main);
+    padding: 20px;
+    position: relative;
+  }
+
+  canvas {
+    max-width: 100%;
+    max-height: 100%;
+    background-color: #111;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    object-fit: contain;
+  }
+
+  /* Timeline (Bottom) */
+  .timeline {
+    height: 200px;
+    background-color: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .timeline-header {
+    height: 30px;
+    background-color: #242426;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .tracks {
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    align-items: flex-end;
+  }
+
+  /* Timeline Clips (Layers) */
+  .clip {
+    width: 160px;
+    height: 120px;
+    background-color: #2c2c2e;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    transition: all 0.2s;
+  }
+
+  .clip:hover { background-color: #3a3a3c; }
+  .clip.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.3); }
+
+  .clip-thumb {
+    flex: 1;
+    background: #111;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: var(--text-secondary);
+  }
+
+  .clip-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .clip-kind { font-size: 10px; color: var(--text-secondary); }
+
+  /* UI Elements */
+  textarea, input[type="text"] {
+    width: 100%;
+    background-color: #000;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 10px;
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+    outline: none;
+  }
+  
+  textarea:focus { border-color: var(--accent); }
+
+  button {
+    background-color: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  button:hover { opacity: 0.9; }
+  button.secondary { background-color: #3a3a3c; color: var(--text-primary); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .slider-group { margin-top: 12px; }
+  .slider-group label { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; color: var(--text-secondary); }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+  #status { font-size: 12px; color: var(--text-secondary); display: none; margin-left: auto; }
+</style>
+</head>
+<body>
+
+  <header>
+    <div>🎬 AI Scene Studio</div>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <span id="status">⏳ Рендеринг...</span>
+      <button class="secondary" onclick="exportImage()">Экспорт PNG</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    
+    <aside class="inspector">
+      <div class="inspector-section">
+        <h3>Сценарист (Master)</h3>
+        <textarea id="masterPrompt" rows="4" placeholder="Киберпанк город, девушка под дождем, неон..."></textarea>
+        <button style="width: 100%; margin-top: 10px;" onclick="decompose()">Раскадровка (Разбить)</button>
+        <button id="btnGenerateAll" class="secondary" style="width: 100%; margin-top: 8px; display: none;" onclick="generateAll()">Сгенерировать всё</button>
+      </div>
+
+      <div class="inspector-section" id="layerProps" style="display: none;">
+        <h3>Свойства слоя</h3>
+        <input type="text" id="layerName" style="margin-bottom: 8px; font-weight: bold;">
+        <textarea id="layerPrompt" rows="5" onchange="updateLayerData()"></textarea>
+        
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+           <button style="flex: 1;" onclick="regenActiveLayer()">Реген</button>
+        </div>
+
+        <div id="transformControls" style="display: none;">
+          <div class="slider-group">
+            <label><span>Масштаб</span> <span id="valScale">1.0</span></label>
+            <input type="range" id="layerScale" min="0.2" max="2.5" step="0.05" oninput="updateLayerData()">
+          </div>
+          <div class="slider-group">
+            <label><span>Ось X</span> <span id="valX">0</span></label>
+            <input type="range" id="layerX" min="-500" max="500" step="10" oninput="updateLayerData()">
+          </div>
+          <div class="slider-group">
+            <label><span>Ось Y</span> <span id="valY">0</span></label>
+            <input type="range" id="layerY" min="-500" max="500" step="10" oninput="updateLayerData()">
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="viewer">
+      <canvas id="canvas" width="1024" height="768"></canvas>
+    </section>
+
+  </div>
+
+  <footer class="timeline">
+    <div class="timeline-header">
+      Таймлайн композиции
+    </div>
+    <div class="tracks" id="tracks">
+      <div style="color: var(--text-secondary); font-size: 13px; margin: auto;">Введите сцену и нажмите «Раскадровка»</div>
+    </div>
+  </footer>
+
+<script>
+  let layers = [];
+  let activeLayerIndex = -1;
+  
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
+
+  function setLoading(isLoading) {
+    statusEl.style.display = isLoading ? 'block' : 'none';
+  }
+
+  async function apiPost(url, body) {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return await res.json();
+  }
+
+  // 1. Разбивка на слои
+  async function decompose() {
+    const prompt = document.getElementById('masterPrompt').value.trim();
+    if (!prompt) return alert('Опишите сцену');
+    
+    setLoading(true);
+    try {
+      const data = await apiPost('/decompose_scene', { prompt });
+      if (data.error) throw new Error(data.error);
+      
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+      layers = parsed.layers.map(l => ({ 
+        ...l, 
+        imgData: null, 
+        scale: 1, 
+        x: 0, 
+        y: 0 
+      }));
+      
+      activeLayerIndex = -1;
+      document.getElementById('layerProps').style.display = 'none';
+      document.getElementById('btnGenerateAll').style.display = 'block';
+      
+      renderTimeline();
+      drawCanvas(); // Очистить старое
+    } catch (e) {
+      alert("Ошибка: " + e.message);
+    }
+    setLoading(false);
+  }
+
+  // 2. Отрисовка таймлайна
+  function renderTimeline() {
+    const tracks = document.getElementById('tracks');
+    tracks.innerHTML = '';
+    
+    layers.forEach((layer, index) => {
+      const clip = document.createElement('div');
+      clip.className = `clip ${index === activeLayerIndex ? 'active' : ''}`;
+      clip.onclick = () => selectLayer(index);
+      
+      const thumbStyle = layer.imgData ? `background-image: url(${layer.imgData});` : '';
+      const icon = layer.imgData ? '' : (layer.kind === 'background' ? '🏞️' : '👤');
+
+      clip.innerHTML = `
+        <div class="clip-thumb" style="${thumbStyle}">${icon}</div>
+        <div class="clip-name">${layer.name}</div>
+        <div class="clip-kind">${layer.kind}</div>
+      `;
+      tracks.appendChild(clip);
+    });
+  }
+
+  // 3. Выбор слоя в инспекторе
+  function selectLayer(index) {
+    activeLayerIndex = index;
+    renderTimeline();
+    
+    const layer = layers[index];
+    const propsPanel = document.getElementById('layerProps');
+    propsPanel.style.display = 'block';
+    
+    document.getElementById('layerName').value = layer.name;
+    document.getElementById('layerPrompt').value = layer.prompt;
+    
+    const transformControls = document.getElementById('transformControls');
+    if (layer.kind === 'background') {
+      transformControls.style.display = 'none';
+    } else {
+      transformControls.style.display = 'block';
+      document.getElementById('layerScale').value = layer.scale;
+      document.getElementById('layerX').value = layer.x;
+      document.getElementById('layerY').value = layer.y;
+      
+      document.getElementById('valScale').innerText = layer.scale;
+      document.getElementById('valX').innerText = layer.x;
+      document.getElementById('valY').innerText = layer.y;
+    }
+  }
+
+  // 4. Обновление данных из инспектора
+  function updateLayerData() {
+    if (activeLayerIndex === -1) return;
+    const layer = layers[activeLayerIndex];
+    
+    layer.name = document.getElementById('layerName').value;
+    layer.prompt = document.getElementById('layerPrompt').value;
+    
+    if (layer.kind !== 'background') {
+      layer.scale = parseFloat(document.getElementById('layerScale').value);
+      layer.x = parseInt(document.getElementById('layerX').value);
+      layer.y = parseInt(document.getElementById('layerY').value);
+      
+      document.getElementById('valScale').innerText = layer.scale;
+      document.getElementById('valX').innerText = layer.x;
+      document.getElementById('valY').innerText = layer.y;
+    }
+    
+    renderTimeline();
+    drawCanvas();
+  }
+
+  // 5. Параллельная генерация
+  async function generateAll() {
+    if(layers.length === 0) return;
+    setLoading(true);
+    
+    try {
+      const promises = layers.map(async (layer, index) => {
+        if(layer.imgData) return; // Пропускаем уже сгенерированные
+        
+        const res = await apiPost('/generate_layer', { 
+          prompt: layer.prompt, layer_name: layer.name, layer_kind: layer.kind 
+        });
+        
+        if (!res.error) {
+          layer.imgData = `data:${res.mime_type};base64,${res.image_base64}`;
+          layer.key_color = res.key_color;
+        }
+      });
+
+      await Promise.all(promises);
+      renderTimeline();
+      await drawCanvas();
+      
+      // Авто-выбор первого слоя объекта для удобства
+      const firstObj = layers.findIndex(l => l.kind !== 'background');
+      if (firstObj !== -1) selectLayer(firstObj);
+      
+    } catch (e) {
+      alert("Ошибка генерации: " + e.message);
+    }
+    setLoading(false);
+  }
+
+  // 6. Регенерация одного слоя
+  async function regenActiveLayer() {
+    if(activeLayerIndex === -1) return;
+    setLoading(true);
+    
+    const layer = layers[activeLayerIndex];
+    layer.imgData = null; // Сбрасываем текущую
+    renderTimeline();
+    
+    try {
+      const res = await apiPost('/generate_layer', { 
+        prompt: layer.prompt, layer_name: layer.name, layer_kind: layer.kind 
+      });
+      if (res.error) throw new Error(res.error);
+      
+      layer.imgData = `data:${res.mime_type};base64,${res.image_base64}`;
+      layer.key_color = res.key_color;
+      
+      renderTimeline();
+      await drawCanvas();
+    } catch (e) {
+      alert(e.message);
+    }
+    setLoading(false);
+  }
+
+  // 7. Отрисовка на Canvas (Хромакей)
+  function hexToRgb(hex) {
+    const n = parseInt(hex.replace('#', ''), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+
+  async function drawCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    for (const layer of layers) {
+      if (!layer.imgData) continue;
+      
+      const img = new Image();
+      await new Promise(r => { img.onload = r; img.src = layer.imgData; });
+
+      if (layer.kind === 'background') {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      } else {
+        const tmp = document.createElement('canvas');
+        tmp.width = img.width; tmp.height = img.height;
+        const tctx = tmp.getContext('2d');
+        tctx.drawImage(img, 0, 0);
+        
+        const idata = tctx.getImageData(0, 0, tmp.width, tmp.height);
+        const d = idata.data;
+        const key = hexToRgb(layer.key_color || '#00FF00');
+        
+        // Хромакей
+        for (let i = 0; i < d.length; i += 4) {
+          const dist = Math.abs(d[i]-key.r) + Math.abs(d[i+1]-key.g) + Math.abs(d[i+2]-key.b);
+          if (dist < 60) d[i+3] = 0;
+        }
+        tctx.putImageData(idata, 0, 0);
+        
+        // Трансформации (Scale, X, Y)
+        const dw = canvas.width * layer.scale;
+        const dh = canvas.height * layer.scale;
+        // Центрирование + смещение
+        const dx = (canvas.width - dw) / 2 + layer.x;
+        const dy = (canvas.height - dh) / 2 + layer.y;
+        
+        ctx.drawImage(tmp, dx, dy, dw, dh);
+      }
+    }
+  }
+
+  function exportImage() {
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = 'ai_scene.png';
+    a.click();
+  }
+</script>
+</body>
+</html>
